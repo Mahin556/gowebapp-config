@@ -230,7 +230,7 @@ helm install gowebapp gowebapp/gowebapp
 
 This project is split across 3 repositories, each with a distinct responsibility:
 
-### 1. [gowebapp](https://github.com/mahinraza/gowebapp.git) — Application
+### 1. [gowebapp](https://github.com/mahin556/gowebapp.git) — Application
 The main application repository containing the Go source code and the GitHub Actions CI/CD pipeline. Every push to the `modules` branch triggers the full pipeline — build, test, lint, Docker image build & push, security scan, and Helm chart update.
 
 ```bash
@@ -267,7 +267,7 @@ The main application repository containing the Go source code and the GitHub Act
         `-- cicd.yml              # GitHub Actions CI/CD pipeline
 ```
 
-### 2. [gowebapp-config](https://github.com/mahinraza/gowebapp-config.git) — Infrastructure & Cluster Config
+### 2. [gowebapp-config](https://github.com/mahin556/gowebapp-config.git) — Infrastructure & Cluster Config
 The configuration repository containing:
 - **Terraform** code for all AWS infrastructure (VPC, EKS, RDS, IAM, ECR, Secrets)
 - **ArgoCD** Application and AppProject manifests
@@ -314,7 +314,7 @@ The configuration repository containing:
 `-- clustersecretstore.yaml       # ClusterSecretStore for ESO
 ```
 
-### 3. [helm-charts](https://github.com/mahinraza/helm-charts.git) — Helm Chart Repository
+### 3. [helm-charts](https://github.com/mahin556/helm-charts.git) — Helm Chart Repository
 A centralized Helm chart repository hosted on GitHub Pages, designed to store Helm charts for multiple applications in one place. The `gowebapp` Helm chart lives here and is automatically versioned and published by the CI/CD pipeline on every release.
 
 > The `gowebapp-config` repo could also serve as the Helm chart host — using a dedicated repo makes it easier to manage charts across multiple applications from a single source.
