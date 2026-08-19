@@ -1,0 +1,516 @@
+# ============================================================
+# Argo CD AppProject
+# ============================================================
+#
+# An AppProject is a logical security and governance boundary
+# in Argo CD.
+#
+# It controls:
+#   1. Which Git/Helm repositories Applications can use
+#   2. Which Kubernetes clusters/namespaces can be deployed to
+#   3. Which cluster-scoped resources can be created
+#   4. Which namespace-scoped resources can be created
+#   5. Which resources are explicitly blocked
+#   6. Which users/groups can access Applications in this project
+#
+# Think of AppProject as:
+#
+#   "What can this Argo CD Application deploy,
+#    where can it deploy, and who can manage it?"
+#
+# ============================================================
+
+apiVersion: argoproj.io/v1alpha1
+
+kind: AppProject
+
+metadata:
+  # Name of the AppProject.
+  #
+  # Applications can reference this project using:
+  #
+  # spec:
+  #   project: gowebapp-project
+  #
+  name: gowebapp-project
+
+  # AppProjects are normally created in the argocd namespace.
+  namespace: argocd
+
+
+spec:
+
+  # Human-readable description of the project.
+  description: Project for gowebapp workloads
+
+
+  # ============================================================
+  # SOURCE REPOSITORIES
+  # ============================================================
+  #
+  # Defines which Git/Helm repositories Applications in this
+  # project are allowed to use.
+  #
+  # This is an important security control.
+  #
+  # An Application cannot use an arbitrary repository if that
+  # repository is not permitted by this AppProject.
+
+  sourceRepos:
+
+    # Git repository containing gowebapp manifests.
+    - https://github.com/mahinraza/gowebapp-config.git
+
+    # Helm repository allowed for Applications in this project.
+    - https://mahinraza.github.io/helm-charts/
+
+
+  # ============================================================
+  # DESTINATIONS
+  # ============================================================
+  #
+  # Defines WHERE Applications belonging to this project
+  # are allowed to deploy.
+  #
+  # Destination is a combination of:
+  #
+  #   server + namespace
+  #
+  # Example:
+  #
+  # server: https://kubernetes.default.svc
+  # namespace: gowebapp
+  #
+  # means:
+  #
+  # "Applications can deploy into the gowebapp namespace
+  #  on this Kubernetes cluster."
+
+  destinations:
+
+    # Allow deployment to the gowebapp namespace
+    # in the current Kubernetes cluster.
+    - namespace: gowebapp
+      server: https://kubernetes.default.svc
+
+    # Additional namespaces could be allowed here.
+    #
+    # Uncommenting these would allow Applications in this
+    # project to deploy into those namespaces.
+    #
+    # - namespace: database
+    #   server: https://kubernetes.default.svc
+    #
+    # - namespace: external-secrets
+    #   server: https://kubernetes.default.svc
+
+
+  # ============================================================
+  # CLUSTER-SCOPED RESOURCE WHITELIST
+  # ============================================================
+  #
+  # Allows specific cluster-scoped Kubernetes resources.
+  #
+  # Cluster-scoped resources do NOT belong to a namespace.
+  #
+  # Examples:
+  #
+  #   Namespace
+  #   ClusterRole
+  #   ClusterRoleBinding
+  #   PersistentVolume
+  #   CustomResourceDefinition
+  #
+  # IMPORTANT:
+  # The whitelist is an allow-list for cluster-scoped resources.
+  #
+  # If a cluster-scoped resource is not allowed here,
+  # the AppProject can prevent Applications from creating it.
+
+  clusterResourceWhitelist:
+
+    # Allow creation/management of Namespace resources.
+    #
+    # This is useful because the Application uses:
+    #
+    #   CreateNamespace=true
+    #
+    # in its sync options.
+    - group: ""
+      kind: Namespace
+
+
+    # Example:
+    #
+    # Allowing Application resources would allow an Application
+    # to create other Argo CD Applications.
+    #
+    # This is commented out because it is intentionally not
+    # permitted by the current configuration.
+    #
+    # - group: "argoproj.io"
+    #   kind: Application
+
+
+    # Allow External Secrets Operator's cluster-scoped
+    # ClusterSecretStore resource.
+    #
+    # ClusterSecretStore is cluster-scoped, unlike SecretStore.
+    - group: external-secrets.io
+      kind: ClusterSecretStore
+
+
+  # ============================================================
+  # NAMESPACE-SCOPED RESOURCE WHITELIST
+  # ============================================================
+  #
+  # Defines which namespace-scoped resource kinds Applications
+  # in this project are allowed to deploy.
+  #
+  # Namespace-scoped resources belong to a specific namespace.
+  #
+  # Examples:
+  #
+  #   Pod
+  #   Service
+  #   Deployment
+  #   ConfigMap
+  #   Secret
+  #   Job
+  #   Ingress
+  #
+  # This provides least-privilege control over what an
+  # Application can create.
+
+  namespaceResourceWhitelist:
+
+
+    # ==========================================================
+    # CORE API RESOURCES
+    # ==========================================================
+
+    # Pod
+    - group: ""
+      kind: Pod
+
+    # Service
+    - group: ""
+      kind: Service
+
+    # ConfigMap
+    - group: ""
+      kind: ConfigMap
+
+    # Secret
+    - group: ""
+      kind: Secret
+
+
+    # PersistentVolumeClaim is currently NOT allowed because
+    # this entry is commented out.
+    #
+    # - group: ""
+    #   kind: PersistentVolumeClaim
+
+
+    # ServiceAccount is currently NOT allowed.
+    #
+    # - group: ""
+    #   kind: ServiceAccount
+
+
+    # ==========================================================
+    # APPS RESOURCES
+    # ==========================================================
+
+    # Deployment is allowed.
+    - group: apps
+      kind: Deployment
+
+    # ReplicaSet is allowed.
+    #
+    # Usually ReplicaSets are created automatically by
+    # Deployments rather than managed directly.
+    - group: apps
+      kind: ReplicaSet
+
+
+    # StatefulSet is currently not allowed.
+    #
+    # - group: apps
+    #   kind: StatefulSet
+
+
+    # DaemonSet is currently not allowed.
+    #
+    # - group: apps
+    #   kind: DaemonSet
+
+
+    # ==========================================================
+    # BATCH RESOURCES
+    # ==========================================================
+
+    # Job is allowed.
+    #
+    # Useful for one-time tasks such as:
+    #
+    #   Database initialization
+    #   Migration
+    #   Backup
+    #   Initialization tasks
+    - group: batch
+      kind: Job
+
+
+    # CronJob is currently not allowed.
+    #
+    # - group: batch
+    #   kind: CronJob
+
+
+    # ==========================================================
+    # EXTERNAL SECRETS OPERATOR
+    # ==========================================================
+
+    # ExternalSecret is namespace-scoped.
+    #
+    # This allows the Application to create ExternalSecret
+    # resources.
+    - group: external-secrets.io
+      kind: ExternalSecret
+
+
+    # SecretStore is currently not allowed.
+    #
+    # - group: external-secrets.io
+    #   kind: SecretStore
+
+
+    # ==========================================================
+    # NETWORKING
+    # ==========================================================
+
+    # Ingress is allowed.
+    #
+    # Applications can therefore create/manage Ingress
+    # resources in their allowed destination namespace.
+    - group: networking.k8s.io
+      kind: Ingress
+
+
+    # NetworkPolicy is currently not allowed.
+    #
+    # - group: networking.k8s.io
+    #   kind: NetworkPolicy
+
+
+    # ==========================================================
+    # AUTOSCALING
+    # ==========================================================
+
+    # HorizontalPodAutoscaler is allowed.
+    #
+    # Allows applications to define automatic scaling rules
+    # for workloads such as Deployments.
+    - group: autoscaling
+      kind: HorizontalPodAutoscaler
+
+
+    # ==========================================================
+    # CERT-MANAGER
+    # ==========================================================
+
+    # Certificate resource is allowed.
+    - group: cert-manager.io
+      kind: Certificate
+
+    # Issuer resource is allowed.
+    #
+    # Issuer is namespace-scoped.
+    - group: cert-manager.io
+      kind: Issuer
+
+
+    # ==========================================================
+    # RBAC
+    # ==========================================================
+    #
+    # Role and RoleBinding are currently NOT allowed because
+    # they are commented out.
+    #
+    # This means Applications in this project cannot manage
+    # these namespace-scoped RBAC resources through this
+    # project's whitelist.
+
+    # - group: rbac.authorization.k8s.io
+    #   kind: Role
+
+    # - group: rbac.authorization.k8s.io
+    #   kind: RoleBinding
+
+
+  # ============================================================
+  # CLUSTER RESOURCE BLACKLIST
+  # ============================================================
+  #
+  # Explicitly blocks dangerous cluster-scoped resources.
+  #
+  # This provides another security layer.
+  #
+  # Even though cluster-scoped resources are controlled by
+  # clusterResourceWhitelist, explicitly blacklisting sensitive
+  # resources makes the security intent clear.
+
+  clusterResourceBlacklist:
+
+    # Prevent Applications in this project from creating
+    # ClusterRoles.
+    #
+    # ClusterRole can grant permissions across namespaces
+    # or across the entire Kubernetes cluster.
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+
+
+    # Prevent Applications from creating ClusterRoleBindings.
+    #
+    # ClusterRoleBinding can grant cluster-wide permissions
+    # to users, groups, or ServiceAccounts.
+    #
+    # Allowing this could allow an application to escalate
+    # privileges significantly.
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+
+
+    # This would block ALL cluster-scoped resources if enabled:
+    #
+    # - group: "*"
+    #   kind: "*"
+    #
+    # However, it is commented out because the current project
+    # needs selected cluster-scoped resources such as Namespace
+    # and ClusterSecretStore.
+
+
+  # ============================================================
+  # PROJECT ROLES
+  # ============================================================
+  #
+  # AppProject roles provide RBAC for Argo CD Applications.
+  #
+  # Important:
+  #
+  # Kubernetes RBAC controls access to Kubernetes resources.
+  #
+  # AppProject roles control access to Argo CD resources,
+  # particularly Applications associated with this project.
+  #
+  # Example:
+  #
+  # Developer
+  #     ↓
+  # Argo CD RBAC
+  #     ↓
+  # Can view Application
+  #
+  # Platform team
+  #     ↓
+  # Argo CD RBAC
+  #     ↓
+  # Can manage Application
+
+
+  roles:
+
+    # ==========================================================
+    # DEVELOPER READ-ONLY ROLE
+    # ==========================================================
+
+    - name: dev-readonly
+
+      # Description of the role's purpose.
+      description: Read-only access for developers
+
+      policies:
+
+        # Argo CD RBAC policy syntax:
+        #
+        # p,
+        # <subject>,
+        # <resource>,
+        # <action>,
+        # <object>,
+        # <effect>
+        #
+        # This policy means:
+        #
+        # Subject:
+        #   proj:gowebapp-project:dev-readonly
+        #
+        # Resource:
+        #   applications
+        #
+        # Action:
+        #   get
+        #
+        # Object:
+        #   gowebapp-project/*
+        #
+        # Effect:
+        #   allow
+        #
+        # Therefore members of this role can GET/view
+        # Applications belonging to gowebapp-project.
+        #
+        # They cannot sync, delete, update, etc. based on
+        # this policy.
+
+        - p, proj:gowebapp-project:dev-readonly, applications, get, gowebapp-project/*, allow
+
+
+      # Map an external/group identity to this project role.
+      #
+      # Members of "gowebapp-devs" receive the permissions
+      # defined by dev-readonly.
+      groups:
+        - gowebapp-devs
+
+
+    # ==========================================================
+    # PLATFORM ADMIN ROLE
+    # ==========================================================
+
+    - name: platform-admin
+
+      # Description of the role.
+      description: Full control for platform team
+
+      policies:
+
+        # "*" means all actions on Applications.
+        #
+        # Therefore this role can perform actions such as:
+        #
+        #   get
+        #   create
+        #   update
+        #   delete
+        #   sync
+        #   override
+        #
+        # on Applications belonging to this project.
+        #
+        # Object:
+        #   gowebapp-project/*
+        #
+        # Effect:
+        #   allow
+
+        - p, proj:gowebapp-project:platform-admin, applications, *, gowebapp-project/*, allow
+
+
+      # Members of platform-team receive this role.
+      groups:
+        - platform-team
