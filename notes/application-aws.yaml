@@ -1,0 +1,342 @@
+# Argo CD Application CRD
+# An Application represents the desired deployment of an application
+# from a Git repository into a Kubernetes cluster.
+
+apiVersion: argoproj.io/v1alpha1
+
+kind: Application
+
+metadata:
+  # Name of the Argo CD Application.
+  # This is the name you will use with:
+  # kubectl get application gowebapp -n argocd
+  # argocd app get gowebapp
+  name: gowebapp
+
+  # Argo CD Applications normally live in the argocd namespace.
+  namespace: argocd
+
+  # Finalizer ensures Argo CD can perform cleanup before the
+  # Application object is completely deleted.
+  #
+  # When the Application is deleted, Argo CD can delete the
+  # Kubernetes resources managed by this Application.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+
+
+spec:
+
+  # Argo CD Project to which this Application belongs.
+  #
+  # AppProject provides additional security and governance:
+  # - Which Git repositories can be used
+  # - Which Kubernetes clusters can be targeted
+  # - Which namespaces can be deployed to
+  # - Which resource types can be created
+  project: gowebapp-project
+
+
+  # ============================================================
+  # SOURCE
+  # ============================================================
+  #
+  # Defines WHERE Argo CD gets the desired Kubernetes state from.
+
+  source:
+
+    # Git repository containing Kubernetes manifests.
+    #
+    # Argo CD continuously monitors this repository for changes.
+    repoURL: https://github.com/mahinraza/gowebapp-config.git
+
+    # Git branch, tag, or commit to track.
+    #
+    # "main" means Argo CD follows the main branch.
+    #
+    # If new commits are pushed to main, Argo CD detects
+    # the change and compares the new desired state with
+    # the live Kubernetes state.
+    targetRevision: main
+
+    # Directory inside the Git repository containing
+    # the Kubernetes manifests.
+    path: manifests/app-aws
+
+    # Directory configuration.
+    directory:
+
+      # Recursively search subdirectories for manifests.
+      #
+      # Example:
+      #
+      # manifests/app-aws/
+      # ├── deployment.yaml
+      # ├── service.yaml
+      # ├── configmap.yaml
+      # └── database/
+      #     └── job.yaml
+      #
+      # With recurse: true, Argo CD processes manifests
+      # inside database/ as well.
+      recurse: true
+
+
+  # ============================================================
+  # DESTINATION
+  # ============================================================
+  #
+  # Defines WHERE Argo CD deploys the application.
+
+  destination:
+
+    # Kubernetes API server.
+    #
+    # https://kubernetes.default.svc means:
+    # deploy to the same Kubernetes cluster where Argo CD
+    # itself is running.
+    #
+    # This is commonly used for an in-cluster deployment.
+    server: https://kubernetes.default.svc
+
+    # Target namespace where the application resources
+    # will be deployed.
+    namespace: gowebapp
+
+
+  # ============================================================
+  # SYNC POLICY
+  # ============================================================
+  #
+  # Defines HOW Argo CD keeps the live cluster synchronized
+  # with the desired state stored in Git.
+
+  syncPolicy:
+
+    # ----------------------------------------------------------
+    # AUTOMATED SYNC
+    # ----------------------------------------------------------
+    #
+    # Without automated sync:
+    #
+    # Git change
+    #    ↓
+    # Argo CD detects OutOfSync
+    #    ↓
+    # Human runs sync
+    #    ↓
+    # Kubernetes updated
+    #
+    # With automated sync:
+    #
+    # Git change
+    #    ↓
+    # Argo CD detects OutOfSync
+    #    ↓
+    # Argo CD automatically syncs
+    #    ↓
+    # Kubernetes updated
+
+    automated:
+
+      # Automatically delete Kubernetes resources that are
+      # removed from Git.
+      #
+      # Example:
+      #
+      # deployment.yaml exists in Git
+      #        ↓
+      # Deployment exists in cluster
+      #
+      # If deployment.yaml is deleted from Git:
+      #        ↓
+      # Argo CD detects the resource is no longer desired
+      #        ↓
+      # prune deletes the Deployment from the cluster.
+      prune: true
+
+
+      # Automatically correct manual changes made directly
+      # to the Kubernetes cluster.
+      #
+      # Example:
+      #
+      # Git:
+      # replicas: 3
+      #
+      # Someone runs:
+      # kubectl scale deployment gowebapp --replicas=5
+      #
+      # Argo CD detects drift:
+      #
+      # Desired state = 3
+      # Live state    = 5
+      #
+      # selfHeal restores the desired state from Git.
+      selfHeal: true
+
+
+      # Controls whether Argo CD is allowed to sync when
+      # the desired application contains zero resources.
+      #
+      # false = do NOT allow an automated sync to intentionally
+      # remove everything because the Git path became empty.
+      #
+      # This provides an additional safety mechanism against
+      # accidentally deleting all application resources.
+      allowEmpty: false
+
+
+    # ==========================================================
+    # SYNC OPTIONS
+    # ==========================================================
+    #
+    # Additional options that control how synchronization works.
+
+    syncOptions:
+
+      # Automatically create the destination namespace if
+      # it does not already exist.
+      #
+      # Without this:
+      # namespace "gowebapp" must already exist.
+      #
+      # With this:
+      # Argo CD can create the namespace automatically.
+      - CreateNamespace=true
+
+
+      # During pruning, delete resources only after the
+      # resources that should remain have been applied.
+      #
+      # Useful when resource deletion should happen at the
+      # end of the synchronization process.
+      #
+      # Example:
+      #
+      # Old resource → deleted LAST
+      # New/updated resources → applied FIRST
+      #
+      # Helps avoid dependency/order-related problems.
+      - PruneLast=true
+
+
+      # Only apply resources that are actually OutOfSync.
+      #
+      # If a resource already matches the desired state,
+      # Argo CD does not unnecessarily re-apply it.
+      #
+      # This can reduce unnecessary API operations.
+      - ApplyOutOfSyncOnly=true
+
+
+      # Tell Argo CD to respect the fields configured under
+      # ignoreDifferences when performing sync operations.
+      #
+      # This is important when you intentionally ignore certain
+      # fields during Argo CD's diff/sync behavior.
+      - RespectIgnoreDifferences=true
+
+
+    # ==========================================================
+    # SYNC RETRY
+    # ==========================================================
+    #
+    # Controls what Argo CD should do when synchronization fails.
+
+    retry:
+
+      # Maximum number of retry attempts.
+      #
+      # limit: 5 means Argo CD can retry a failed sync
+      # up to five times.
+      limit: 5
+
+      # Controls the delay between retry attempts.
+      backoff:
+
+        # Initial retry delay.
+        #
+        # First retry waits approximately 5 seconds.
+        duration: 5s
+
+        # Multiplier applied to the previous retry delay.
+        #
+        # Example:
+        #
+        # Retry 1 → 5s
+        # Retry 2 → 10s
+        # Retry 3 → 20s
+        # Retry 4 → 40s
+        #
+        # The actual sequence is bounded by maxDuration.
+        factor: 2
+
+        # Maximum amount of time Argo CD waits between retries.
+        #
+        # Even though the factor keeps increasing the delay,
+        # it will not exceed 3 minutes.
+        maxDuration: 3m
+
+
+  # ============================================================
+  # IGNORE DIFFERENCES
+  # ============================================================
+  #
+  # Tells Argo CD to ignore specific differences between:
+  #
+  # Desired state → Git
+  # Live state    → Kubernetes
+  #
+  # This is useful for fields that Kubernetes or another
+  # controller changes automatically.
+
+  ignoreDifferences:
+
+    - group: batch
+
+      # Kubernetes resource type.
+      kind: Job
+
+      # Apply this ignore rule only to this specific Job.
+      name: gowebapp-db-init
+
+      # JSON Pointer paths of fields that Argo CD should ignore
+      # when comparing desired and live state.
+
+      jsonPointers:
+
+        # Ignore Job status.
+        #
+        # Kubernetes/controllers update status dynamically:
+        #
+        # status:
+        #   active: 1
+        #   succeeded: 1
+        #   failed: 0
+        #
+        # These changes are runtime-generated and should not
+        # normally cause Argo CD to report the resource as
+        # OutOfSync.
+        - /status
+
+
+        # Ignore resourceVersion.
+        #
+        # Kubernetes automatically changes metadata.resourceVersion
+        # whenever the resource is modified.
+        #
+        # It is generated by the Kubernetes API server and is
+        # not normally something you manage in Git.
+        - /metadata/resourceVersion
+
+
+        # Ignore ALL annotations on this Job.
+        #
+        # This can be useful when Argo CD hooks/controllers add,
+        # modify, or remove annotations dynamically.
+        #
+        # NOTE:
+        # /metadata/annotations ignores the entire annotations
+        # object, not just one annotation.
+        - /metadata/annotations
